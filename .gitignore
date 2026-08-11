@@ -7,16 +7,31 @@ venv/
 # Google OAuth
 backend/credentials.json
 backend/token.json
+backend/tokens/
 
-# Node
+# Database
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# ML Models
+backend/ml/*.pkl
+
+# Dataset
+backend/dataset/
+
+# Uploads & History
+backend/uploads/
+backend/history/
+
+# Demo Video
+demo video.mp4
+
+# Frontend
 frontend/node_modules/
-
-# Build
 frontend/dist/
 
 # VS Code
 .vscode/
 
-# OS
-.DS_Store
-Thumbs.db
+backend/cybershield.db

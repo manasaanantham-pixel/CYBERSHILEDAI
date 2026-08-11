@@ -4,9 +4,7 @@ import joblib
 import pandas as pd
 
 
-# =========================================================
-# PATHS
-# =========================================================
+
 
 BASE_DIR = os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))
@@ -27,9 +25,6 @@ MALWARE_FEATURES_PATH = os.path.join(
 )
 
 
-# =========================================================
-# LOAD MODELS
-# =========================================================
 
 print("Loading CyberShield AI models...")
 
@@ -73,9 +68,7 @@ except Exception as e:
 print("CyberShield AI models ready.")
 
 
-# =========================================================
-# RISK CALCULATION
-# =========================================================
+
 
 def calculate_email_risk(prediction, confidence):
 
@@ -115,9 +108,7 @@ def calculate_email_risk(prediction, confidence):
     return "unknown"
 
 
-# =========================================================
-# SECURITY REASONS
-# =========================================================
+
 
 def get_security_reasons(text, prediction):
 
@@ -213,9 +204,7 @@ def get_security_reasons(text, prediction):
     return reasons
 
 
-# =========================================================
-# EMAIL ANALYSIS
-# =========================================================
+
 
 def analyze_email(
     text: str,
@@ -253,10 +242,7 @@ def analyze_email(
 
     try:
 
-        # -------------------------------------------------
-        # AI MODEL PREDICTION
-        # -------------------------------------------------
-
+      
         prediction = email_model.predict(
             [combined_text]
         )[0]
@@ -266,9 +252,7 @@ def analyze_email(
         ).lower().strip()
 
 
-        # -------------------------------------------------
-        # CONFIDENCE
-        # -------------------------------------------------
+        
 
         confidence = 0.0
 
@@ -286,10 +270,7 @@ def analyze_email(
             )
 
 
-        # -------------------------------------------------
-        # NORMALIZE LABEL
-        # -------------------------------------------------
-
+       
         if prediction in [
             "benign",
             "ham",
@@ -328,9 +309,7 @@ def analyze_email(
             prediction = "safe"
 
 
-        # -------------------------------------------------
-        # RISK
-        # -------------------------------------------------
+        
 
         risk = calculate_email_risk(
             prediction,
@@ -338,9 +317,7 @@ def analyze_email(
         )
 
 
-        # -------------------------------------------------
-        # REASONS
-        # -------------------------------------------------
+       
 
         reasons = get_security_reasons(
             combined_text,
@@ -381,9 +358,7 @@ def analyze_email(
         }
 
 
-# =========================================================
-# MALWARE ANALYSIS
-# =========================================================
+
 
 def predict_malware(file_path: str):
 
@@ -423,9 +398,7 @@ def predict_malware(file_path: str):
                 [features]
             )
 
-        # -------------------------------------------------
-        # MATCH TRAINING FEATURES
-        # -------------------------------------------------
+        
 
         if malware_features is not None:
 
@@ -445,18 +418,13 @@ def predict_malware(file_path: str):
                 ]
 
 
-        # -------------------------------------------------
-        # PREDICTION
-        # -------------------------------------------------
 
         prediction = malware_model.predict(
             data
         )[0]
 
 
-        # -------------------------------------------------
-        # CONFIDENCE
-        # -------------------------------------------------
+       
 
         confidence = 0.0
 
@@ -474,9 +442,7 @@ def predict_malware(file_path: str):
             )
 
 
-        # -------------------------------------------------
-        # RESULT
-        # -------------------------------------------------
+        
 
         if int(prediction) == 1:
 

@@ -1,11 +1,21 @@
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
+
+from pydantic import BaseModel
+from pydantic import EmailStr
+
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
-from passlib.context import CryptContext
 
 from database import get_db
 from models import User
+
+from auth import (
+    hash_password,
+    verify_password,
+    create_access_token
+)
 
 
 router = APIRouter(
@@ -14,36 +24,22 @@ router = APIRouter(
 )
 
 
-# =========================================================
-# PASSWORD HASHING
-# =========================================================
-# Use PBKDF2 instead of bcrypt to avoid bcrypt compatibility
-# problems with the current Python environment.
 
-pwd_context = CryptContext(
-    schemes=["pbkdf2_sha256"],
-    deprecated="auto"
-)
-
-
-# =========================================================
-# REQUEST MODELS
-# =========================================================
 
 class SignupRequest(BaseModel):
+
     name: str
     email: EmailStr
     password: str
 
 
 class LoginRequest(BaseModel):
+
     email: EmailStr
     password: str
 
 
-# =========================================================
-# SIGNUP
-# =========================================================
+
 
 @router.post("/signup")
 def signup(
@@ -51,47 +47,104 @@ def signup(
     db: Session = Depends(get_db)
 ):
 
-    # Check existing email
+    name = data.name.strip()
+    email = str(data.email).strip().lower()
+    password = data.password
+
+
+    if not name:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Name is required."
+        )
+
+
+    if len(password) < 6:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Password must contain at least 6 characters."
+        )
+
+
     existing_user = (
         db.query(User)
-        .filter(User.email == data.email)
+        .filter(
+            User.email == email
+        )
         .first()
     )
 
+
     if existing_user:
+
         raise HTTPException(
             status_code=400,
-            detail="Email already registered"
+            detail="Email already registered. Please login."
         )
 
-    # Hash password
-    hashed_password = pwd_context.hash(data.password)
 
-    # Create user
-    new_user = User(
-        name=data.name,
-        email=data.email,
-        password_hash=hashed_password
+    try:
+
+        hashed_password = hash_password(
+            password
+        )
+
+    except Exception as error:
+
+        print(
+            "PASSWORD HASH ERROR:",
+            error
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to securely create password."
+        )
+
+
+    user = User(
+        name=name,
+        email=email,
+        hashed_password=hashed_password
     )
 
-    db.add(new_user)
+
+    db.add(user)
     db.commit()
-    db.refresh(new_user)
+    db.refresh(user)
+
+
+    token = create_access_token(
+        user.id
+    )
+
 
     return {
+
         "success": True,
-        "message": "Account created successfully",
+
+        "message": "Account created successfully.",
+
+        "access_token": token,
+
+        "token_type": "bearer",
+
         "user": {
-            "id": new_user.id,
-            "name": new_user.name,
-            "email": new_user.email
+
+            "id": user.id,
+
+            "name": user.name,
+
+            "email": user.email
+
         }
+
     }
 
 
-# =========================================================
-# LOGIN
-# =========================================================
+
 
 @router.post("/login")
 def login(
@@ -99,35 +152,63 @@ def login(
     db: Session = Depends(get_db)
 ):
 
-    # Find user
+    email = str(data.email).strip().lower()
+
+
     user = (
         db.query(User)
-        .filter(User.email == data.email)
+        .filter(
+            User.email == email
+        )
         .first()
     )
 
+
     if not user:
+
         raise HTTPException(
             status_code=401,
-            detail="Invalid email or password"
+            detail="Invalid email or password."
         )
 
-    # Verify password
-    if not pwd_context.verify(
+
+    password_valid = verify_password(
         data.password,
-        user.password_hash
-    ):
+        user.hashed_password
+    )
+
+
+    if not password_valid:
+
         raise HTTPException(
             status_code=401,
-            detail="Invalid email or password"
+            detail="Invalid email or password."
         )
+
+
+    token = create_access_token(
+        user.id
+    )
+
 
     return {
+
         "success": True,
-        "message": "Login successful",
+
+        "message": "Login successful.",
+
+        "access_token": token,
+
+        "token_type": "bearer",
+
         "user": {
+
             "id": user.id,
+
             "name": user.name,
+
             "email": user.email
+
         }
+
     }

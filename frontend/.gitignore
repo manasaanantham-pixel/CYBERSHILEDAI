@@ -1,24 +1,35 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
 
-node_modules
-dist
-dist-ssr
-*.local
+# Google OAuth
+backend/credentials.json
+backend/token.json
+backend/tokens/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Database
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# ML Models
+backend/ml/*.pkl
+
+# Dataset
+backend/dataset/
+
+# Uploads & History
+backend/uploads/
+backend/history/
+
+# Demo Video
+demo video.mp4
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# VS Code
+.vscode/

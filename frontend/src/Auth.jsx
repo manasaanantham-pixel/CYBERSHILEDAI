@@ -1,9 +1,8 @@
 import { useState } from "react";
 import "./Auth.css";
+import { API_URL } from "./api";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
-
-function Auth({ onLogin, onBack }) {
+export default function Auth({ onLogin, onBack }) {
   const [mode, setMode] = useState("login");
 
   const [name, setName] = useState("");
@@ -14,205 +13,135 @@ function Auth({ onLogin, onBack }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const clearMessages = () => {
-    setError("");
-    setSuccess("");
-  };
-
   const switchMode = (newMode) => {
     setMode(newMode);
-    clearMessages();
+    setError("");
+    setSuccess("");
     setPassword("");
-
-    if (newMode === "login") {
-      setName("");
-    }
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    clearMessages();
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanName = name.trim();
-
-    if (!cleanEmail || !password) {
-      setError("Please enter your email and password.");
-      return;
-    }
-
-    if (mode === "signup" && !cleanName) {
-      setError("Please enter your full name.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setError("Password must contain at least 6 characters.");
-      return;
-    }
-
+    setError("");
+    setSuccess("");
     setLoading(true);
 
     try {
-      const endpoint =
-        mode === "signup"
-          ? `${API_BASE_URL}/auth/signup`
-          : `${API_BASE_URL}/auth/login`;
+      const cleanEmail = email.trim().toLowerCase();
 
-      const requestBody =
-        mode === "signup"
+      if (!cleanEmail) {
+        throw new Error("Please enter your email.");
+      }
+
+      if (password.length < 6) {
+        throw new Error(
+          "Password must contain at least 6 characters."
+        );
+      }
+
+      if (mode === "signup" && !name.trim()) {
+        throw new Error("Please enter your name.");
+      }
+
+      const endpoint =
+        mode === "login"
+          ? "/auth/login"
+          : "/auth/signup";
+
+      const body =
+        mode === "login"
           ? {
-              name: cleanName,
               email: cleanEmail,
-              password: password,
+              password,
             }
           : {
+              name: name.trim(),
               email: cleanEmail,
-              password: password,
+              password,
             };
 
-      console.log("CyberShield API:", endpoint);
+      const response = await fetch(
+        `${API_URL}${endpoint}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(body),
+        }
+      );
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const responseText = await response.text();
+      const text = await response.text();
 
       let data = {};
 
       try {
-        data = responseText ? JSON.parse(responseText) : {};
+        data = JSON.parse(text);
       } catch {
         throw new Error(
-          "Backend returned an invalid response. Please make sure FastAPI is running."
+          "Backend returned invalid JSON."
         );
       }
-
-      console.log("Backend status:", response.status);
-      console.log("Backend response:", data);
 
       if (!response.ok) {
-        let backendError =
+        throw new Error(
           data.detail ||
-          data.message ||
-          data.error ||
-          "Authentication failed.";
-
-        // FastAPI sometimes returns validation errors as an array
-        if (Array.isArray(backendError)) {
-          backendError = backendError
-            .map((item) => item.msg || "Invalid input")
-            .join(", ");
-        }
-
-        const errorText = String(backendError);
-
-        // Duplicate email
-        if (
-          errorText.toLowerCase().includes("already registered") ||
-          errorText.toLowerCase().includes("already exists") ||
-          errorText.toLowerCase().includes("email already")
-        ) {
-          setError(
-            "This email is already registered. Please login instead."
-          );
-
-          setMode("login");
-          return;
-        }
-
-        // Wrong login details
-        if (
-          errorText.toLowerCase().includes("incorrect") ||
-          errorText.toLowerCase().includes("invalid credentials") ||
-          errorText.toLowerCase().includes("wrong password")
-        ) {
-          setError(
-            "Incorrect email or password. Please try again."
-          );
-          return;
-        }
-
-        throw new Error(errorText);
-      }
-
-      // ==========================================
-      // SIGN UP SUCCESS
-      // ==========================================
-
-      if (mode === "signup") {
-        setSuccess(
-          "Account created successfully. Please login."
+            data.message ||
+            "Authentication failed."
         );
-
-        setPassword("");
-
-        setTimeout(() => {
-          setMode("login");
-          setSuccess("");
-        }, 1200);
-
-        return;
       }
 
-      // ==========================================
-      // LOGIN SUCCESS
-      // ==========================================
+      const token = data.access_token;
 
-      const token =
-        data.access_token ||
-        data.token ||
-        data.accessToken;
-
-      if (token) {
-        localStorage.setItem("access_token", token);
+      if (!token) {
+        throw new Error(
+          "Login succeeded but backend did not return an access token."
+        );
       }
 
-      const loggedInUser =
-        data.user ||
-        {
-          name:
-            data.name ||
-            cleanName ||
-            cleanEmail.split("@")[0],
-          email:
-            data.email ||
-            cleanEmail,
-        };
+      const loggedInUser = data.user;
+
+      if (!loggedInUser) {
+        throw new Error(
+          "Backend did not return user information."
+        );
+      }
+
+      localStorage.setItem(
+        "access_token",
+        token
+      );
 
       localStorage.setItem(
         "user",
         JSON.stringify(loggedInUser)
       );
 
-      setSuccess("Login successful.");
+      setSuccess(
+        mode === "login"
+          ? "Login successful."
+          : "Account created successfully."
+      );
 
-      // Give UI a moment to show success message
       setTimeout(() => {
         onLogin(loggedInUser);
-      }, 300);
-
+      }, 400);
     } catch (err) {
-      console.error("CYBERSHIELD AUTH ERROR:", err);
+      console.error(
+        "CYBERSHIELD AUTH ERROR:",
+        err
+      );
 
       if (
-        err.message.includes("Failed to fetch") ||
-        err.message.includes("NetworkError")
+        err.message.includes("Failed to fetch")
       ) {
         setError(
-          "Unable to connect to CyberShield AI server. Make sure FastAPI is running on http://127.0.0.1:8000"
+          "Unable to connect to CyberShield AI server. Start FastAPI first."
         );
       } else {
-        setError(
-          err.message || "Something went wrong. Please try again."
-        );
+        setError(err.message);
       }
     } finally {
       setLoading(false);
@@ -221,96 +150,75 @@ function Auth({ onLogin, onBack }) {
 
   return (
     <div className="auth-page">
-
-      {/* =========================================
-          LEFT PANEL
-      ========================================= */}
-
       <section className="auth-left">
-
         <button
           type="button"
           className="auth-back"
           onClick={onBack}
         >
-          ← Back to CyberShield
+          ← Back
         </button>
 
-        <div className="auth-left-content">
-
-          <div className="auth-brand">
-            <div className="auth-brand-icon">
-              🛡️
-            </div>
-
-            <span>
-              CyberShield <b>AI</b>
-            </span>
+        <div className="auth-brand">
+          <div className="auth-brand-icon">
+            ✦
           </div>
 
-          <div className="auth-badge">
-            <span className="auth-pulse"></span>
-            INTELLIGENT SECURITY PLATFORM
+          <span>
+            CyberShield <b>AI</b>
+          </span>
+        </div>
+
+        <div className="auth-badge">
+          <span className="auth-pulse"></span>
+          INTELLIGENT SECURITY PLATFORM
+        </div>
+
+        <h1>
+          Secure your
+          <br />
+          <span>digital world.</span>
+        </h1>
+
+        <p>
+          Protect your Gmail with AI-powered email
+          security. CyberShield AI identifies spam,
+          phishing and malicious content.
+        </p>
+
+        <div className="auth-features">
+          <div>
+            <span>✓</span>
+            AI-powered email threat analysis
           </div>
 
-          <h1>
-            Secure your
-            <br />
-            <span>digital world.</span>
-          </h1>
-
-          <p>
-            Protect your Gmail with AI-powered email
-            security. CyberShield AI helps identify
-            spam, phishing and malicious content before
-            it becomes a threat.
-          </p>
-
-          <div className="auth-features">
-
-            <div>
-              <span>✓</span>
-              AI-powered email threat analysis
-            </div>
-
-            <div>
-              <span>✓</span>
-              Spam and phishing detection
-            </div>
-
-            <div>
-              <span>✓</span>
-              Secure Gmail integration
-            </div>
-
-            <div>
-              <span>✓</span>
-              JWT-based authentication
-            </div>
-
+          <div>
+            <span>✓</span>
+            Spam and phishing detection
           </div>
 
+          <div>
+            <span>✓</span>
+            Secure Gmail integration
+          </div>
+
+          <div>
+            <span>✓</span>
+            JWT-based authentication
+          </div>
         </div>
 
         <div className="auth-left-footer">
-          <span>●</span> CYBERSHIELD AI SECURITY ENGINE ONLINE
+          <span className="footer-dot"></span>
+          CYBERSHIELD AI SECURITY ENGINE ONLINE
         </div>
-
       </section>
 
-      {/* =========================================
-          RIGHT PANEL
-      ========================================= */}
-
       <section className="auth-right">
-
         <div className="auth-card">
-
-          {/* MOBILE BRAND */}
-
           <div className="mobile-brand">
             <div className="auth-brand-icon">
-              🛡️
+              ✦
             </div>
 
             <span>
@@ -318,10 +226,7 @@ function Auth({ onLogin, onBack }) {
             </span>
           </div>
 
-          {/* HEADER */}
-
           <div className="auth-card-header">
-
             <div className="auth-card-label">
               {mode === "login"
                 ? "SECURE LOGIN"
@@ -339,59 +244,59 @@ function Auth({ onLogin, onBack }) {
                 ? "Login to access your CyberShield AI security dashboard."
                 : "Create your account and start protecting your email."}
             </p>
-
           </div>
 
-          {/* MODE SWITCH */}
-
           <div className="auth-switch">
-
             <button
               type="button"
-              className={mode === "login" ? "active" : ""}
-              onClick={() => switchMode("login")}
+              className={
+                mode === "login"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                switchMode("login")
+              }
             >
               Login
             </button>
 
             <button
               type="button"
-              className={mode === "signup" ? "active" : ""}
-              onClick={() => switchMode("signup")}
+              className={
+                mode === "signup"
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                switchMode("signup")
+              }
             >
               Sign Up
             </button>
-
           </div>
-
-          {/* ERROR */}
 
           {error && (
             <div className="auth-message auth-error">
-              <div className="message-icon">!</div>
+              <div className="message-icon">
+                !
+              </div>
 
               <div>
-                <strong>Authentication failed</strong>
-                <p>{error}</p>
+                <strong>
+                  Authentication failed
+                </strong>
 
-                {error.includes("already registered") && (
-                  <button
-                    type="button"
-                    className="message-action"
-                    onClick={() => switchMode("login")}
-                  >
-                    Go to Login →
-                  </button>
-                )}
+                <p>{error}</p>
               </div>
             </div>
           )}
 
-          {/* SUCCESS */}
-
           {success && (
             <div className="auth-message auth-success">
-              <div className="message-icon">✓</div>
+              <div className="message-icon">
+                ✓
+              </div>
 
               <div>
                 <strong>Success</strong>
@@ -400,13 +305,9 @@ function Auth({ onLogin, onBack }) {
             </div>
           )}
 
-          {/* FORM */}
-
           <form onSubmit={handleSubmit}>
-
             {mode === "signup" && (
               <div className="form-group">
-
                 <label htmlFor="name">
                   FULL NAME
                 </label>
@@ -419,15 +320,13 @@ function Auth({ onLogin, onBack }) {
                   onChange={(e) =>
                     setName(e.target.value)
                   }
-                  autoComplete="name"
                   disabled={loading}
+                  autoComplete="name"
                 />
-
               </div>
             )}
 
             <div className="form-group">
-
               <label htmlFor="email">
                 EMAIL ADDRESS
               </label>
@@ -440,19 +339,15 @@ function Auth({ onLogin, onBack }) {
                 onChange={(e) =>
                   setEmail(e.target.value)
                 }
-                autoComplete="email"
                 disabled={loading}
+                autoComplete="email"
               />
-
             </div>
 
             <div className="form-group">
-
-              <div className="password-header">
-                <label htmlFor="password">
-                  PASSWORD
-                </label>
-              </div>
+              <label htmlFor="password">
+                PASSWORD
+              </label>
 
               <input
                 id="password"
@@ -462,51 +357,33 @@ function Auth({ onLogin, onBack }) {
                 onChange={(e) =>
                   setPassword(e.target.value)
                 }
+                disabled={loading}
                 autoComplete={
                   mode === "login"
                     ? "current-password"
                     : "new-password"
                 }
-                disabled={loading}
               />
-
             </div>
-
-            {mode === "signup" && (
-              <div className="password-help">
-                Password must contain at least 6 characters.
-              </div>
-            )}
-
-            {/* SUBMIT */}
 
             <button
               type="submit"
               className="auth-submit"
               disabled={loading}
             >
-              {loading ? (
-                <>
-                  <span className="spinner"></span>
-                  Please wait...
-                </>
-              ) : (
-                <>
-                  {mode === "login"
-                    ? "Login to Dashboard"
-                    : "Create Account"}
+              {loading
+                ? "Please wait..."
+                : mode === "login"
+                ? "Login to Dashboard"
+                : "Create Account"}
 
-                  <span>→</span>
-                </>
+              {!loading && (
+                <span>→</span>
               )}
             </button>
-
           </form>
 
-          {/* BOTTOM SWITCH */}
-
           <div className="auth-bottom-text">
-
             {mode === "login"
               ? "Don't have an account?"
               : "Already have an account?"}
@@ -522,40 +399,12 @@ function Auth({ onLogin, onBack }) {
               }
             >
               {mode === "login"
-                ? "Create one"
+                ? "Sign Up"
                 : "Login"}
             </button>
-
           </div>
-
-          {/* SECURITY */}
-
-          <div className="auth-security">
-
-            <div className="security-icon">
-              🔒
-            </div>
-
-            <div>
-              <strong>
-                Secure authentication
-              </strong>
-
-              <p>
-                Your credentials are protected using
-                secure password hashing and JWT
-                authentication.
-              </p>
-            </div>
-
-          </div>
-
         </div>
-
       </section>
-
     </div>
   );
 }
-
-export default Auth;

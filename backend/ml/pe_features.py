@@ -50,9 +50,6 @@ def extract_pe_features(file_path):
 
     features = {}
 
-    # =====================================================
-    # DOS HEADER
-    # =====================================================
 
     features["e_magic"] = pe.DOS_HEADER.e_magic
     features["e_cblp"] = pe.DOS_HEADER.e_cblp
@@ -72,9 +69,7 @@ def extract_pe_features(file_path):
     features["e_oeminfo"] = pe.DOS_HEADER.e_oeminfo
     features["e_lfanew"] = pe.DOS_HEADER.e_lfanew
 
-    # =====================================================
-    # FILE HEADER
-    # =====================================================
+   
 
     file_header = pe.FILE_HEADER
 
@@ -86,9 +81,7 @@ def extract_pe_features(file_path):
     features["SizeOfOptionalHeader"] = file_header.SizeOfOptionalHeader
     features["Characteristics"] = file_header.Characteristics
 
-    # =====================================================
-    # OPTIONAL HEADER
-    # =====================================================
+  
 
     optional = pe.OPTIONAL_HEADER
 
@@ -121,9 +114,7 @@ def extract_pe_features(file_path):
     features["LoaderFlags"] = optional.LoaderFlags
     features["NumberOfRvaAndSizes"] = optional.NumberOfRvaAndSizes
 
-    # =====================================================
-    # SECTION FEATURES
-    # =====================================================
+   
 
     sections = pe.sections
 
@@ -181,9 +172,7 @@ def extract_pe_features(file_path):
         except Exception:
             pass
 
-    # =====================================================
-    # SECTION STATISTICS
-    # =====================================================
+   
 
     if section_entropies:
         features["SectionMinEntropy"] = min(section_entropies)
@@ -248,9 +237,6 @@ def extract_pe_features(file_path):
         features["SectionMaxChar"] = 0
         features["SectionMainChar"] = 0
 
-    # =====================================================
-    # IMPORT / EXPORT / DIRECTORY FEATURES
-    # =====================================================
 
     import_count = 0
 
@@ -371,9 +357,7 @@ def extract_pe_features(file_path):
 
             features[feature_name] = 0
 
-    # =====================================================
-    # LOAD MODEL FEATURE ORDER
-    # =====================================================
+    
 
     feature_names = joblib.load(
         FEATURES_PATH
