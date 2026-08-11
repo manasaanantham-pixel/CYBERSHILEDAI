@@ -1,5 +1,5 @@
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "https://cybershieldai-gg60.onrender.com";
 
 export { API_URL };
 
