@@ -7,7 +7,6 @@ from routers.auth import router as auth_router
 from routers.gmail import router as gmail_router
 from routers.analysis import router as analysis_router
 
-
 Base.metadata.create_all(bind=engine)
 
 
@@ -24,10 +23,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://cybershiledai.vercel.app",
+
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+
         "http://localhost:5174",
         "http://127.0.0.1:5174",
+
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
@@ -53,23 +55,9 @@ def home():
     }
 
 
-
 @app.get("/health")
 def health_check():
     return {
         "status": "healthy",
         "service": "CyberShield AI"
-    }
-
-
-@app.get("/debug/routes")
-def debug_routes():
-    return {
-        "routes": [
-            {
-                "path": route.path,
-                "methods": list(route.methods or [])
-            }
-            for route in app.routes
-        ]
     }
