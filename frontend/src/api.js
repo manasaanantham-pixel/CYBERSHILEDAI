@@ -1,28 +1,21 @@
-const API_URL = "https://cybershieldai-gg60.onrender.com";
+const API_URL = "https://cybershiledai-gg60.onrender.com";
 
 export { API_URL };
 
-
 export async function apiFetch(endpoint, options = {}) {
-
     const token = localStorage.getItem("access_token");
 
     const headers = {
         ...(options.headers || {})
     };
 
-
-    // Add JWT token if available
     if (token) {
         headers.Authorization = `Bearer ${token}`;
     }
 
-
     let response;
 
-
     try {
-
         response = await fetch(
             `${API_URL}${endpoint}`,
             {
@@ -30,9 +23,7 @@ export async function apiFetch(endpoint, options = {}) {
                 headers
             }
         );
-
     } catch (error) {
-
         console.error(
             "CyberShield AI connection error:",
             error
@@ -43,20 +34,14 @@ export async function apiFetch(endpoint, options = {}) {
         );
     }
 
-
     const text = await response.text();
 
     let data = {};
 
-
     if (text) {
-
         try {
-
             data = JSON.parse(text);
-
         } catch (error) {
-
             console.error(
                 "Invalid JSON from backend:",
                 text
@@ -68,17 +53,9 @@ export async function apiFetch(endpoint, options = {}) {
         }
     }
 
-
-    // Unauthorized
     if (response.status === 401) {
-
-        localStorage.removeItem(
-            "access_token"
-        );
-
-        localStorage.removeItem(
-            "user"
-        );
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
 
         throw new Error(
             data.detail ||
@@ -86,16 +63,12 @@ export async function apiFetch(endpoint, options = {}) {
         );
     }
 
-
-    // Other errors
     if (!response.ok) {
-
         throw new Error(
             data.detail ||
             `Request failed with status ${response.status}.`
         );
     }
-
 
     return data;
 }
