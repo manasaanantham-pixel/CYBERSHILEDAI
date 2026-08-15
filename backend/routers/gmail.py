@@ -1,5 +1,5 @@
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -14,45 +14,24 @@ from gmail.gmail_service import (
     extract_attachments,
 )
 
+from gmail.google_oauth import (
+    create_google_flow,
+    save_credentials,
+    delete_user_gmail_token,
+)
+
+
 router = APIRouter(
     prefix="/gmail",
     tags=["Gmail"]
 )
 
 
-
-
 @router.get("/status")
 def gmail_status(
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        profile = get_profile(current_user.id)
 
-        return {
-            "success": True,
-            "connected": True,
-            "email": profile.get("emailAddress", ""),
-            "messages_total": profile.get("messagesTotal", 0),
-            "threads_total": profile.get("threadsTotal", 0),
-        }
-
-    except Exception:
-        return {
-            "success": True,
-            "connected": False,
-            "email": "",
-            "messages_total": 0,
-            "threads_total": 0,
-        }
-
-
-
-
-@router.get("/connect")
-def connect_gmail(
-    current_user: User = Depends(get_current_user)
-):
     try:
 
         profile = get_profile(
@@ -73,32 +52,212 @@ def connect_gmail(
             "threads_total": profile.get(
                 "threadsTotal",
                 0
+            ),
+        }
+
+    except Exception:
+
+        return {
+            "success": True,
+            "connected": False,
+            "email": "",
+            "messages_total": 0,
+            "threads_total": 0,
+        }
+
+
+
+@router.get("/oauth/start")
+def gmail_oauth_start(
+    current_user: User = Depends(get_current_user)
+):
+
+    try:
+
+        flow = create_google_flow()
+
+        authorization_url, state = (
+            flow.authorization_url(
+                access_type="offline",
+                include_granted_scopes="true",
+                prompt="select_account consent",
             )
+        )
+
+        return {
+            "success": True,
+            "authorization_url": authorization_url,
         }
 
     except Exception as error:
 
-        error_message = str(error)
-
-        # Gmail account is not connected yet
-        if (
-            "token" in error_message.lower()
-            or "credential" in error_message.lower()
-            or "401" in error_message
-            or "unauthorized" in error_message.lower()
-        ):
-            raise HTTPException(
-                status_code=401,
-                detail="Gmail is not connected. Please connect your Google account."
-            )
+        print(
+            "GMAIL OAUTH START ERROR:",
+            str(error)
+        )
 
         raise HTTPException(
             status_code=500,
-            detail=error_message
+            detail=str(error)
         )
 
 
 
+@router.get("/oauth/callback")
+def gmail_oauth_callback(
+    request: Request,
+    code: str = None,
+    state: str = None,
+):
+
+    if not code:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Google authorization code missing."
+        )
+
+    try:
+
+        flow = create_google_flow()
+
+        flow.fetch_token(
+            code=code
+        )
+
+        credentials = flow.credentials
+
+        # IMPORTANT:
+        # Google OAuth callback does not automatically
+        # know our logged-in user.
+        #
+        # For the current simple version we use
+        # the user ID passed through OAuth state.
+
+        if not state:
+
+            raise HTTPException(
+                status_code=400,
+                detail="OAuth state missing."
+            )
+
+        user_id = int(state)
+
+        save_credentials(
+            user_id,
+            credentials
+        )
+
+        profile = get_profile(
+            user_id
+        )
+
+        email = profile.get(
+            "emailAddress",
+            ""
+        )
+
+        frontend_url = (
+            "https://cybershiledai.vercel.app"
+        )
+
+        return RedirectResponse(
+            url=(
+                f"{frontend_url}"
+                f"/?gmail_connected=true"
+                f"&email={email}"
+            )
+        )
+
+    except Exception as error:
+
+        print(
+            "GMAIL OAUTH CALLBACK ERROR:",
+            str(error)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(error)
+        )
+
+
+
+@router.get("/connect")
+def connect_gmail(
+    current_user: User = Depends(get_current_user)
+):
+
+    try:
+
+        profile = get_profile(
+            current_user.id
+        )
+
+        return {
+            "success": True,
+            "connected": True,
+            "email": profile.get(
+                "emailAddress",
+                ""
+            ),
+            "messages_total": profile.get(
+                "messagesTotal",
+                0
+            ),
+            "threads_total": profile.get(
+                "threadsTotal",
+                0
+            ),
+        }
+
+    except Exception as error:
+
+        print(
+            "GMAIL CONNECT ERROR:",
+            str(error)
+        )
+
+        # Gmail is not connected.
+        # Tell frontend to start OAuth.
+
+        try:
+
+            flow = create_google_flow()
+
+            authorization_url, state = (
+                flow.authorization_url(
+                    access_type="offline",
+                    include_granted_scopes="true",
+                    prompt="select_account consent",
+                    state=str(
+                        current_user.id
+                    ),
+                )
+            )
+
+            return {
+                "success": True,
+                "connected": False,
+                "authorization_url": authorization_url,
+            }
+
+        except Exception as oauth_error:
+
+            print(
+                "GMAIL OAUTH ERROR:",
+                str(oauth_error)
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=str(oauth_error)
+            )
+
+
+# --------------------------------------------------
+# GMAIL MESSAGES
+# --------------------------------------------------
 
 @router.get("/messages")
 def get_messages(
@@ -196,6 +355,7 @@ def get_messages(
                 "analysis": {
                     "status": "pending"
                 }
+
             })
 
         return {
@@ -215,22 +375,14 @@ def get_messages(
 
     except Exception as error:
 
-        error_message = str(error)
-
-        if (
-            "401" in error_message
-            or "unauthorized" in error_message.lower()
-            or "token" in error_message.lower()
-            or "credential" in error_message.lower()
-        ):
-            raise HTTPException(
-                status_code=401,
-                detail="Gmail authorization expired. Please connect Gmail again."
-            )
+        print(
+            "GMAIL MESSAGES ERROR:",
+            str(error)
+        )
 
         raise HTTPException(
             status_code=500,
-            detail=error_message
+            detail=str(error)
         )
 
 
@@ -243,10 +395,6 @@ def switch_gmail(
 
     try:
 
-        from gmail.google_oauth import (
-            delete_user_gmail_token
-        )
-
         delete_user_gmail_token(
             current_user.id
         )
@@ -254,10 +402,18 @@ def switch_gmail(
         return {
             "success": True,
             "connected": False,
-            "message": "Gmail connection removed. Connect Gmail again."
+            "message": (
+                "Gmail connection removed. "
+                "Connect Gmail again."
+            )
         }
 
     except Exception as error:
+
+        print(
+            "GMAIL SWITCH ERROR:",
+            str(error)
+        )
 
         raise HTTPException(
             status_code=500,

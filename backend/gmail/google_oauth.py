@@ -1,16 +1,14 @@
 import os
+import json
 
 from google.auth.transport.requests import Request
-
 from google.oauth2.credentials import Credentials
-
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly"
 ]
-
 
 BASE_DIR = os.path.dirname(
     os.path.dirname(
@@ -18,23 +16,41 @@ BASE_DIR = os.path.dirname(
     )
 )
 
+# Render Secret File is available at /etc/secrets/
+RENDER_CREDENTIALS_FILE = "/etc/secrets/credentials.json"
 
-CREDENTIALS_FILE = os.path.join(
+# Local development fallback
+LOCAL_CREDENTIALS_FILE = os.path.join(
     BASE_DIR,
     "credentials.json"
 )
-
 
 TOKENS_DIR = os.path.join(
     BASE_DIR,
     "tokens"
 )
 
-
 os.makedirs(
     TOKENS_DIR,
     exist_ok=True
 )
+
+
+def get_credentials_file():
+
+    if os.path.exists(
+        RENDER_CREDENTIALS_FILE
+    ):
+        return RENDER_CREDENTIALS_FILE
+
+    if os.path.exists(
+        LOCAL_CREDENTIALS_FILE
+    ):
+        return LOCAL_CREDENTIALS_FILE
+
+    raise FileNotFoundError(
+        "credentials.json not found."
+    )
 
 
 def get_token_file(user_id: int):
@@ -52,7 +68,6 @@ def delete_user_gmail_token(user_id: int):
     )
 
     if os.path.exists(token_file):
-
         os.remove(token_file)
 
 
@@ -67,15 +82,10 @@ def get_gmail_credentials(
 
     credentials = None
 
-    
-
     if force_reauth:
-
         delete_user_gmail_token(
             user_id
         )
-
-    
 
     if os.path.exists(token_file):
 
@@ -89,10 +99,7 @@ def get_gmail_credentials(
             )
 
         except Exception:
-
             credentials = None
-
-    
 
     if (
         credentials
@@ -110,34 +117,38 @@ def get_gmail_credentials(
 
             credentials = None
 
-    
+    if credentials and credentials.valid:
+        return credentials
 
-    if not credentials or not credentials.valid:
+    raise Exception(
+        "Gmail is not connected. Please connect your Google account first."
+    )
 
-        if not os.path.exists(
-            CREDENTIALS_FILE
-        ):
 
-            raise FileNotFoundError(
-                "credentials.json not found inside backend folder."
-            )
+def create_google_flow():
 
-        flow = (
-            InstalledAppFlow.from_client_secrets_file(
-                CREDENTIALS_FILE,
-                SCOPES
-            )
-        )
+    credentials_file = get_credentials_file()
 
-        credentials = flow.run_local_server(
+    flow = Flow.from_client_secrets_file(
+        credentials_file,
+        scopes=SCOPES
+    )
 
-            port=0,
+    flow.redirect_uri = (
+        "https://cybershiledai-gg60.onrender.com/gmail/oauth/callback"
+    )
 
-            prompt="select_account",
+    return flow
 
-            access_type="offline"
-        )
 
+def save_credentials(
+    user_id: int,
+    credentials
+):
+
+    token_file = get_token_file(
+        user_id
+    )
 
     with open(
         token_file,
@@ -147,5 +158,4 @@ def get_gmail_credentials(
         token.write(
             credentials.to_json()
         )
-
-    return credentials
+        
