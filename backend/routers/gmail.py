@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session
 
-from database import get_db
 from models import User
 from dependencies import get_current_user
 
@@ -26,6 +24,13 @@ router = APIRouter(
     tags=["Gmail"]
 )
 
+
+FRONTEND_URL = "https://cybershiledai.vercel.app"
+
+
+# =========================================================
+# GMAIL STATUS
+# =========================================================
 
 @router.get("/status")
 def gmail_status(
@@ -55,7 +60,12 @@ def gmail_status(
             ),
         }
 
-    except Exception:
+    except Exception as error:
+
+        print(
+            "GMAIL STATUS:",
+            str(error)
+        )
 
         return {
             "success": True,
@@ -66,6 +76,9 @@ def gmail_status(
         }
 
 
+# =========================================================
+# START OAUTH
+# =========================================================
 
 @router.get("/oauth/start")
 def gmail_oauth_start(
@@ -81,6 +94,9 @@ def gmail_oauth_start(
                 access_type="offline",
                 include_granted_scopes="true",
                 prompt="select_account consent",
+                state=str(
+                    current_user.id
+                ),
             )
         )
 
@@ -102,6 +118,9 @@ def gmail_oauth_start(
         )
 
 
+# =========================================================
+# OAUTH CALLBACK
+# =========================================================
 
 @router.get("/oauth/callback")
 def gmail_oauth_callback(
@@ -117,6 +136,24 @@ def gmail_oauth_callback(
             detail="Google authorization code missing."
         )
 
+    if not state:
+
+        raise HTTPException(
+            status_code=400,
+            detail="OAuth state missing."
+        )
+
+    try:
+
+        user_id = int(state)
+
+    except ValueError:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid OAuth state."
+        )
+
     try:
 
         flow = create_google_flow()
@@ -126,22 +163,6 @@ def gmail_oauth_callback(
         )
 
         credentials = flow.credentials
-
-        # IMPORTANT:
-        # Google OAuth callback does not automatically
-        # know our logged-in user.
-        #
-        # For the current simple version we use
-        # the user ID passed through OAuth state.
-
-        if not state:
-
-            raise HTTPException(
-                status_code=400,
-                detail="OAuth state missing."
-            )
-
-        user_id = int(state)
 
         save_credentials(
             user_id,
@@ -157,16 +178,14 @@ def gmail_oauth_callback(
             ""
         )
 
-        frontend_url = (
-            "https://cybershiledai.vercel.app"
+        redirect_url = (
+            f"{FRONTEND_URL}"
+            f"/?gmail_connected=true"
+            f"&email={email}"
         )
 
         return RedirectResponse(
-            url=(
-                f"{frontend_url}"
-                f"/?gmail_connected=true"
-                f"&email={email}"
-            )
+            url=redirect_url
         )
 
     except Exception as error:
@@ -176,12 +195,19 @@ def gmail_oauth_callback(
             str(error)
         )
 
-        raise HTTPException(
-            status_code=500,
-            detail=str(error)
+        error_url = (
+            f"{FRONTEND_URL}"
+            f"/?gmail_error=true"
+        )
+
+        return RedirectResponse(
+            url=error_url
         )
 
 
+# =========================================================
+# CONNECT GMAIL
+# =========================================================
 
 @router.get("/connect")
 def connect_gmail(
@@ -214,12 +240,9 @@ def connect_gmail(
     except Exception as error:
 
         print(
-            "GMAIL CONNECT ERROR:",
+            "GMAIL CONNECT:",
             str(error)
         )
-
-        # Gmail is not connected.
-        # Tell frontend to start OAuth.
 
         try:
 
@@ -255,9 +278,9 @@ def connect_gmail(
             )
 
 
-# --------------------------------------------------
+# =========================================================
 # GMAIL MESSAGES
-# --------------------------------------------------
+# =========================================================
 
 @router.get("/messages")
 def get_messages(
@@ -386,7 +409,9 @@ def get_messages(
         )
 
 
-
+# =========================================================
+# SWITCH GMAIL
+# =========================================================
 
 @router.post("/switch")
 def switch_gmail(
@@ -403,8 +428,7 @@ def switch_gmail(
             "success": True,
             "connected": False,
             "message": (
-                "Gmail connection removed. "
-                "Connect Gmail again."
+                "Gmail connection removed."
             )
         }
 

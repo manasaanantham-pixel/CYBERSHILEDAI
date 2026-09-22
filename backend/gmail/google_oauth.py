@@ -1,109 +1,214 @@
 import os
 import json
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+from dotenv import load_dotenv
 from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
+
+# =========================================================
+# LOAD ENVIRONMENT VARIABLES
+# =========================================================
+
+load_dotenv()
+
+
+# =========================================================
+# GOOGLE SCOPES
+# =========================================================
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly"
 ]
 
-BASE_DIR = os.path.dirname(
-    os.path.dirname(
-        os.path.abspath(__file__)
-    )
-)
 
-# Render Secret File is available at /etc/secrets/
-RENDER_CREDENTIALS_FILE = "/etc/secrets/credentials.json"
+# =========================================================
+# GOOGLE OAUTH SETTINGS
+# =========================================================
 
-# Local development fallback
-LOCAL_CREDENTIALS_FILE = os.path.join(
-    BASE_DIR,
-    "credentials.json"
-)
+CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
+print("GOOGLE REDIRECT URI:", REDIRECT_URI)
 
-TOKENS_DIR = os.path.join(
-    BASE_DIR,
+# =========================================================
+# TOKEN DIRECTORY
+# =========================================================
+
+TOKEN_DIR = os.path.join(
+    os.path.dirname(__file__),
     "tokens"
 )
 
 os.makedirs(
-    TOKENS_DIR,
+    TOKEN_DIR,
     exist_ok=True
 )
 
 
-def get_credentials_file():
+# =========================================================
+# CREATE GOOGLE OAUTH FLOW
+# =========================================================
 
-    if os.path.exists(
-        RENDER_CREDENTIALS_FILE
-    ):
-        return RENDER_CREDENTIALS_FILE
+def create_google_flow():
 
-    if os.path.exists(
-        LOCAL_CREDENTIALS_FILE
-    ):
-        return LOCAL_CREDENTIALS_FILE
+    if not CLIENT_ID:
+        raise RuntimeError(
+            "GOOGLE_CLIENT_ID is missing."
+        )
 
-    raise FileNotFoundError(
-        "credentials.json not found."
+    if not CLIENT_SECRET:
+        raise RuntimeError(
+            "GOOGLE_CLIENT_SECRET is missing."
+        )
+
+    if not REDIRECT_URI:
+        raise RuntimeError(
+            "GOOGLE_REDIRECT_URI is missing."
+        )
+
+    client_config = {
+        "web": {
+            "client_id": CLIENT_ID,
+
+            "client_secret": CLIENT_SECRET,
+
+            "auth_uri":
+                "https://accounts.google.com/o/oauth2/auth",
+
+            "token_uri":
+                "https://oauth2.googleapis.com/token",
+
+            "redirect_uris": [
+                REDIRECT_URI
+            ]
+        }
+    }
+
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=SCOPES,
+        redirect_uri=REDIRECT_URI
     )
 
+    return flow
 
-def get_token_file(user_id: int):
+
+# =========================================================
+# GET TOKEN PATH
+# =========================================================
+
+def get_token_path(user_id: int):
 
     return os.path.join(
-        TOKENS_DIR,
+        TOKEN_DIR,
         f"user_{user_id}.json"
     )
 
 
-def delete_user_gmail_token(user_id: int):
+# =========================================================
+# SAVE GOOGLE CREDENTIALS
+# =========================================================
 
-    token_file = get_token_file(
-        user_id
-    )
-
-    if os.path.exists(token_file):
-        os.remove(token_file)
-
-
-def get_gmail_credentials(
+def save_credentials(
     user_id: int,
-    force_reauth: bool = False
+    credentials
 ):
 
-    token_file = get_token_file(
+    token_path = get_token_path(
         user_id
     )
 
-    credentials = None
+    data = {
+        "token": credentials.token,
 
-    if force_reauth:
-        delete_user_gmail_token(
-            user_id
+        "refresh_token": credentials.refresh_token,
+
+        "token_uri": credentials.token_uri,
+
+        "client_id": credentials.client_id,
+
+        "client_secret": credentials.client_secret,
+
+        "scopes": credentials.scopes
+    }
+
+    with open(
+        token_path,
+        "w",
+        encoding="utf-8"
+    ) as file:
+
+        json.dump(
+            data,
+            file,
+            indent=4
         )
 
-    if os.path.exists(token_file):
 
-        try:
+# =========================================================
+# LOAD GOOGLE CREDENTIALS
+# =========================================================
 
-            credentials = (
-                Credentials.from_authorized_user_file(
-                    token_file,
-                    SCOPES
-                )
+def load_credentials(
+    user_id: int
+):
+
+    token_path = get_token_path(
+        user_id
+    )
+
+    if not os.path.exists(
+        token_path
+    ):
+        return None
+
+    try:
+
+        credentials = (
+            Credentials.from_authorized_user_file(
+                token_path,
+                SCOPES
             )
+        )
 
-        except Exception:
-            credentials = None
+        return credentials
+
+    except Exception as error:
+
+        print(
+            "LOAD GOOGLE TOKEN ERROR:",
+            str(error)
+        )
+
+        return None
+
+
+# =========================================================
+# GET GMAIL CREDENTIALS
+# =========================================================
+
+def get_gmail_credentials(
+    user_id: int
+):
+
+    credentials = load_credentials(
+        user_id
+    )
+
+    if credentials is None:
+
+        raise RuntimeError(
+            "Gmail is not connected for this user."
+        )
+
+    # -----------------------------------------------------
+    # Refresh expired access token
+    # -----------------------------------------------------
 
     if (
-        credentials
-        and credentials.expired
+        credentials.expired
         and credentials.refresh_token
     ):
 
@@ -113,49 +218,59 @@ def get_gmail_credentials(
                 Request()
             )
 
-        except Exception:
+            save_credentials(
+                user_id,
+                credentials
+            )
 
-            credentials = None
+        except Exception as error:
 
-    if credentials and credentials.valid:
-        return credentials
+            print(
+                "GOOGLE TOKEN REFRESH ERROR:",
+                str(error)
+            )
 
-    raise Exception(
-        "Gmail is not connected. Please connect your Google account first."
-    )
+            raise RuntimeError(
+                "Gmail session expired. "
+                "Please reconnect Gmail."
+            )
+
+    # -----------------------------------------------------
+    # Check credentials
+    # -----------------------------------------------------
+
+    if not credentials.valid:
+
+        raise RuntimeError(
+            "Gmail credentials are invalid. "
+            "Please reconnect Gmail."
+        )
+
+    return credentials
 
 
-def create_google_flow():
+# =========================================================
+# DELETE USER GMAIL TOKEN
+# =========================================================
 
-    credentials_file = get_credentials_file()
-
-    flow = Flow.from_client_secrets_file(
-        credentials_file,
-        scopes=SCOPES
-    )
-
-    flow.redirect_uri = (
-        "https://cybershiledai-gg60.onrender.com/gmail/oauth/callback"
-    )
-
-    return flow
-
-
-def save_credentials(
-    user_id: int,
-    credentials
+def delete_user_gmail_token(
+    user_id: int
 ):
 
-    token_file = get_token_file(
+    token_path = get_token_path(
         user_id
     )
 
-    with open(
-        token_file,
-        "w"
-    ) as token:
+    if os.path.exists(
+        token_path
+    ):
 
-        token.write(
-            credentials.to_json()
+        os.remove(
+            token_path
         )
-        
+
+        print(
+            f"Deleted Gmail token for user {user_id}"
+        )
+
+    return True
