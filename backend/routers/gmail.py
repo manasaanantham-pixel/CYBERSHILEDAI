@@ -19,6 +19,10 @@ from gmail.google_oauth import (
 )
 
 
+# =========================================================
+# GMAIL ROUTER
+# =========================================================
+
 router = APIRouter(
     prefix="/gmail",
     tags=["Gmail"]
@@ -427,9 +431,7 @@ def switch_gmail(
         return {
             "success": True,
             "connected": False,
-            "message": (
-                "Gmail connection removed."
-            )
+            "message": "Gmail connection removed."
         }
 
     except Exception as error:

@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -16,13 +15,11 @@ from routers.analysis import router as analysis_router
 # DATABASE
 # =========================================================
 
-Base.metadata.create_all(
-    bind=engine
-)
+Base.metadata.create_all(bind=engine)
 
 
 # =========================================================
-# FASTAPI APPLICATION
+# FASTAPI APP
 # =========================================================
 
 app = FastAPI(
@@ -33,19 +30,23 @@ app = FastAPI(
 
 
 # =========================================================
-# CORS CONFIGURATION
+# CORS
 # =========================================================
 
 app.add_middleware(
     CORSMiddleware,
+
     allow_origins=[
         "https://cybershiledai.vercel.app",
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:3000",
     ],
+
     allow_credentials=False,
+
     allow_methods=["*"],
+
     allow_headers=["*"],
 )
 
@@ -55,12 +56,14 @@ app.add_middleware(
 # =========================================================
 
 app.include_router(auth_router)
+
 app.include_router(gmail_router)
+
 app.include_router(analysis_router)
 
 
 # =========================================================
-# ROOT ENDPOINT
+# HOME
 # =========================================================
 
 @app.get("/")
@@ -74,7 +77,7 @@ def home():
 
 
 # =========================================================
-# HEALTH CHECK ENDPOINT
+# HEALTH CHECK
 # =========================================================
 
 @app.get("/health")
@@ -84,11 +87,3 @@ def health_check():
         "status": "healthy",
         "service": "CyberShield AI"
     }
-
-
-# =========================================================
-# SERVER START COMMAND
-# =========================================================
-
-# Run using:
-# uvicorn main:app --host 0.0.0.0 --port $PORT
