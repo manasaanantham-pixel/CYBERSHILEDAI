@@ -1,4 +1,4 @@
-const API_URL = "https://cybershieldai-gg60.onrender.com";
+const API_URL = "https://cybershiledai-gg60.onrender.com";
 
 export { API_URL };
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Auth from "./Auth";
 import "./App.css";
 
-const API_URL = "https://cybershieldai-gg60.onrender.com";
+const API_URL = "https://cybershiledai-gg60.onrender.com";
 const emptySummary = {
     safe: 0,
     spam: 0,
