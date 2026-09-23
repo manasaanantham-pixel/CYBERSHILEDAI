@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
@@ -30,6 +31,16 @@ router = APIRouter(
 
 
 FRONTEND_URL = "https://cybershiledai.vercel.app"
+
+
+# =========================================================
+# OAUTH SESSION STORAGE
+# =========================================================
+# Stores the PKCE code_verifier temporarily.
+# Note: This is in-memory storage and resets if the server
+# restarts or redeploys.
+
+OAUTH_SESSIONS = {}
 
 
 # =========================================================
@@ -97,12 +108,14 @@ def gmail_oauth_start(
             flow.authorization_url(
                 access_type="offline",
                 include_granted_scopes="true",
-                prompt="select_account consent",
-                state=str(
-                    current_user.id
-                ),
+                prompt="select_account consent"
             )
         )
+
+        OAUTH_SESSIONS[state] = {
+            "user_id": current_user.id,
+            "code_verifier": flow.code_verifier
+        }
 
         return {
             "success": True,
@@ -147,20 +160,35 @@ def gmail_oauth_callback(
             detail="OAuth state missing."
         )
 
-    try:
+    oauth_session = OAUTH_SESSIONS.pop(
+        state,
+        None
+    )
 
-        user_id = int(state)
+    if not oauth_session:
 
-    except ValueError:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid OAuth state."
+        print(
+            "OAUTH SESSION NOT FOUND"
         )
+
+        return RedirectResponse(
+            url=(
+                f"{FRONTEND_URL}"
+                f"/?gmail_error=true"
+            )
+        )
+
+    user_id = oauth_session["user_id"]
+
+    code_verifier = oauth_session[
+        "code_verifier"
+    ]
 
     try:
 
         flow = create_google_flow()
+
+        flow.code_verifier = code_verifier
 
         flow.fetch_token(
             code=code
@@ -256,12 +284,14 @@ def connect_gmail(
                 flow.authorization_url(
                     access_type="offline",
                     include_granted_scopes="true",
-                    prompt="select_account consent",
-                    state=str(
-                        current_user.id
-                    ),
+                    prompt="select_account consent"
                 )
             )
+
+            OAUTH_SESSIONS[state] = {
+                "user_id": current_user.id,
+                "code_verifier": flow.code_verifier
+            }
 
             return {
                 "success": True,
@@ -293,9 +323,11 @@ def get_messages(
 ):
 
     if limit < 1:
+
         limit = 1
 
     if limit > 100:
+
         limit = 100
 
     try:
@@ -398,6 +430,7 @@ def get_messages(
             "count": len(emails),
 
             "emails": emails
+
         }
 
     except Exception as error:
@@ -445,3 +478,4 @@ def switch_gmail(
             status_code=500,
             detail=str(error)
         )
+        
